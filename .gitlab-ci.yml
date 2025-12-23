@@ -2,7 +2,7 @@ stages:
   - check
   - copy
   - deploy
-  - monitoring
+
 
 variables:
   ANSIBLE_PLAYBOOK_CHECK: "ansible-mongo/playbook/check.yaml"
