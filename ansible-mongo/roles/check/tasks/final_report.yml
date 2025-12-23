@@ -1,0 +1,85 @@
+- name: Build per-host check report
+  set_fact:
+    host_check_result:
+      hostname: "{{ inventory_hostname }}"
+
+      ping: "{{ ping_check | default(false) }}"
+      ports_required: "{{ check_ports | default([]) }}"
+      ports_open: "{{ ports_open | default([]) }}"
+      ports_closed: "{{ ports_closed | default([]) }}"
+
+      cpu:
+        cores: "{{ cpu_cores }}"
+        load_avg: "{{ cpu_load_avg }}"
+        load_pct: "{{ cpu_percent }}"
+
+      ram:
+        total_gb: "{{ ram_total_gb }}"
+        free_gb: "{{ ram_free_gb }}"
+        free_pct: "{{ ram_free_pct }}"
+
+      docker_ram: "{{ docker_ram_report | default([]) }}"
+
+      disk_root:
+        total_gb: "{{ disk_total_gb }}"
+        free_gb: "{{ disk_free_gb }}"
+        free_pct: "{{ disk_free_pct }}"
+
+      disk_storage:
+        total_gb: "{{ storage_total_gb | default('N/A') }}"
+        free_gb: "{{ storage_free_gb | default('N/A') }}"
+        free_pct: "{{ storage_free_pct | default('N/A') }}"
+
+
+- name: Calculate total Docker RAM used (MB)
+  set_fact:
+    docker_ram_total_used_mb: "{{ host_check_result.docker_ram | map(attribute='used_mb') | map('float') | sum | round(1) }}"
+
+- name: Calculate total Docker RAM limits (MB)
+  set_fact:
+    docker_ram_total_limit_mb: "{{ host_check_result.docker_ram | map(attribute='limit_mb') | map('float') | sum | round(1) }}"
+
+- name: Convert physical host total RAM to MB
+  set_fact:
+    host_total_ram_mb: "{{ (host_check_result.ram.total_gb | float * 1024) | round(1) }}"
+
+- name: Calculate unallocated RAM (host total - Docker limits)
+  set_fact:
+    docker_ram_limit_gap_mb: "{{ (host_total_ram_mb | float - docker_ram_total_limit_mb | float) | round(1) }}"
+
+
+- name: Write JSON report to /tmp
+  copy:
+    content: "{{ host_check_result | to_nice_json }}"
+    dest: "/tmp/precheck_report_{{ inventory_hostname }}.json"
+  delegate_to: localhost
+
+
+- name: Display final summary (nicely formatted)
+  debug:
+    msg: |
+      🖥️ Host: {{ host_check_result.hostname }}
+      📡 Ping: {{ 'OK ✅' if host_check_result.ping else 'FAIL ❌' }}
+      🔌 Checked ports: {{ host_check_result.ports_required | join(', ') }}
+      ✅ OPEN: {{ host_check_result.ports_open | join(', ') if host_check_result.ports_open else 'None' }}
+      ❌ CLOSED: {{ host_check_result.ports_closed | join(', ') if host_check_result.ports_closed else 'None' }}
+
+      🧠 RAM: {{ host_check_result.ram.free_gb }} GB free out of {{ host_check_result.ram.total_gb }} GB ({{ host_check_result.ram.free_pct }}%)
+      🔥 CPU: {{ host_check_result.cpu.load_avg }} load / {{ host_check_result.cpu.cores }} cores ({{ host_check_result.cpu.load_pct }}%) 
+      💾 Root (/): {{ host_check_result.disk_root.free_gb }} GB free out of {{ host_check_result.disk_root.total_gb }} GB ({{ host_check_result.disk_root.free_pct }}%)
+      📁 /storage: {{ host_check_result.disk_storage.free_gb }} GB free out of {{ host_check_result.disk_storage.total_gb }} GB ({{ host_check_result.disk_storage.free_pct }}%)
+
+      🐳 Docker RAM usage:
+      {% if host_check_result.docker_ram | length > 0 %}
+      {% for c in host_check_result.docker_ram %}
+      - {{ c.name }} → {{ c.used_mb }} MB / {{ c.limit_mb }} MB ({{ c.percent }})
+      {% endfor %}
+      {% else %}
+      - No Docker containers running or accessible.
+      {% endif %}
+
+      📊 Docker RAM Summary:
+      - Actual usage: {{ docker_ram_total_used_mb }} MB
+      - Total limits: {{ docker_ram_total_limit_mb }} MB
+      - Physical RAM: {{ host_total_ram_mb }} MB
+      - Unallocated to containers: {{ docker_ram_limit_gap_mb }} MB

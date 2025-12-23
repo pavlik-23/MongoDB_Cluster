@@ -1,0 +1,98 @@
+---
+# 0) Normalize ports list (acceptă listă YAML sau "22,27019")
+- name: Normalize ports list
+  set_fact:
+    ports_to_check: >-
+      {{
+        (check_ports if check_ports is sequence else
+          ((check_ports | default('')) | string | split(',')))
+        | map('trim') | reject('equalto','') | map('int') | list
+      }}
+
+- name: Ensure ports_to_check is not empty
+  assert:
+    that:
+      - ports_to_check | length > 0
+    fail_msg: "Nu ai definit niciun port în check_ports pentru {{ inventory_hostname }}!"
+
+# 1) Alege unealta (prefer ss, fallback netstat)
+- name: Detect socket tool (prefer ss)
+  shell: |
+    if command -v ss >/dev/null 2>&1; then echo ss;
+    elif command -v netstat >/dev/null 2>&1; then echo netstat;
+    else echo none; fi
+  register: socket_tool
+  changed_when: false
+
+- name: Fail if no socket tool available
+  assert:
+    that:
+      - socket_tool.stdout != "none"
+    fail_msg: "Nu există 'ss' sau 'netstat' pe {{ inventory_hostname }}!"
+
+# 2) Sondăm fiecare port: OPEN dacă există LISTEN
+- name: Probe LISTEN per port (clean, no grep substrings)
+  shell: >
+    {% if socket_tool.stdout == 'ss' -%}
+    ss -H -lnt 'sport = :{{ item }}' 2>/dev/null
+    {%- else -%}
+    netstat -tln 2>/dev/null | awk '/LISTEN/ {print $4}' | awk -F: '{print $NF}' | grep -x {{ item }} || true
+    {%- endif %}
+  loop: "{{ ports_to_check }}"
+  register: listen_checks
+  changed_when: false
+  failed_when: false
+
+- name: Compute OPEN/CLOSED sets
+  set_fact:
+    ports_open: "{{ listen_checks.results | selectattr('stdout','!=','') | map(attribute='item') | list }}"
+    ports_closed: "{{ listen_checks.results | selectattr('stdout','==','') | map(attribute='item') | list }}"
+
+# 3) Afișează cine ține porturile (dacă sunt deschise)
+- name: Show owners of OPEN ports
+  when: ports_open | length > 0
+  shell: >
+    {% if socket_tool.stdout == 'ss' -%}
+    ss -H -lntp 2>/dev/null | egrep -w ':{{
+      (ports_open | map('string') | list | join("|:"))
+    }}\b'
+    {%- else -%}
+    netstat -lntp 2>/dev/null | awk 'NR>2' | egrep -w ':{{
+      (ports_open | map('string') | list | join("|:"))
+    }}\b'
+    {%- endif %}
+  register: owners
+  changed_when: false
+  failed_when: false
+
+- name: Owners lines
+  when: owners.stdout is defined and owners.stdout | length > 0
+  debug:
+    msg: "{{ owners.stdout }}"
+
+# 4) Rezumat + politică de eșec
+- name: Display checked ports (✅ CLOSED / ❌ OPEN)
+  debug:
+    msg: |
+      Expect: {{ (check_ports_expect | default('stopped')) | upper }}
+      {% for p in ports_to_check %}
+      {{ "✅ CLOSED" if (p in ports_closed) else "❌ OPEN" }} : port {{ p }}
+      {% endfor %}
+
+- name: Enforce expectation (expect CLOSED)
+  assert:
+    that:
+      - ports_open | length == 0
+    fail_msg: >-
+      Porturi în stare neașteptată pe {{ inventory_hostname }}.
+      Așteptam 'stopped' dar am găsit OPEN={{ ports_open }} CLOSED={{ ports_closed }}
+  when: (check_ports_expect | default('stopped')) == 'stopped'
+
+- name: Enforce expectation (expect OPEN)
+  assert:
+    that:
+      - ports_closed | length == 0
+    fail_msg: >-
+      Porturi în stare neașteptată pe {{ inventory_hostname }}.
+      Așteptam 'started' dar am găsit OPEN={{ ports_open }} CLOSED={{ ports_closed }}
+  when: (check_ports_expect | default('stopped')) == 'started'

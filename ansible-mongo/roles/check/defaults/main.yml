@@ -1,0 +1,12 @@
+---
+# defaults file for roles/check
+# Ce grup evaluezi (poți suprascrie cu -e target_group=mongo)
+target_group: "check"
+
+# Praguri minime (poți schimba din extra-vars)
+min_ram_gb: 8            # minim RAM liber recomandat
+min_storage_gb: 100       # minim spațiu liber pe /storage (sau / dacă lipsește)
+
+# Ponderi pentru scor: prioritate RAM > Spațiu
+weight_ram: 1.0
+weight_storage: 0.2

@@ -1,0 +1,48 @@
+- name: Include unit_map pentru conversia RAM
+  include_vars: "{{ role_path }}/vars/docker_units.yml"
+
+- name: Colectează statistici Docker RAM (docker stats)
+  shell: docker stats --no-stream --format "{{'{{.Name}};{{.MemUsage}}'}}"
+  register: docker_stats_raw
+  changed_when: false
+  failed_when: docker_stats_raw.rc != 0
+
+- name: Inițializează listă goală pentru docker_ram_report
+  set_fact:
+    docker_ram_report: []
+
+- name: Parsează RAM Docker per container (corect, fără regex_replace)
+  set_fact:
+    docker_ram_report: "{{ docker_ram_report + [ {
+      'name': parts[0],
+      'used_mb': '%.1f' | format((used_value | float * unit_map.get(used_unit, 1)) / 1024),
+      'limit_mb': '%.1f' | format((limit_value | float * unit_map.get(limit_unit, 1)) / 1024),
+      'percent': (
+        '%.1f%%' | format(
+          ((used_value | float * unit_map.get(used_unit, 1)) /
+           (limit_value | float * unit_map.get(limit_unit, 1)) * 100)
+          if (limit_value | float) > 0 else 0.0
+        )
+      )
+    } ] }}"
+  loop: "{{ docker_stats_raw.stdout_lines }}"
+  vars:
+    parts: "{{ item.split(';') }}"
+    used_raw: "{{ parts[1].split(' / ')[0] }}"
+    limit_raw: "{{ parts[1].split(' / ')[1] }}"
+    used_value: "{{ used_raw[:-3] }}"
+    used_unit: "{{ used_raw[-3:] }}"
+    limit_value: "{{ limit_raw[:-3] }}"
+    limit_unit: "{{ limit_raw[-3:] }}"
+
+- name: Debug pentru verificare rezultat docker_ram_report
+  debug:
+    var: docker_ram_report
+
+- name: Afișează raport RAM Docker per container
+  debug:
+    msg: |
+      🐳 Docker containers RAM usage:
+      {% for c in docker_ram_report %}
+      - {{ c.name }} → {{ c.used_mb }} MB / {{ c.limit_mb }} MB ({{ c.percent }})
+      {% endfor %}

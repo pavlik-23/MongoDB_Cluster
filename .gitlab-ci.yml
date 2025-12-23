@@ -1,0 +1,99 @@
+stages:
+  - check
+  - copy
+  - deploy
+  - monitoring
+
+variables:
+  ANSIBLE_PLAYBOOK_CHECK: "ansible-mongo/playbook/check.yaml"
+  ANSIBLE_PLAYBOOK_COPY: "ansible-mongo/playbook/mongo_copy.yaml"
+  ANSIBLE_PLAYBOOK_DEPLOY: "ansible-mongo/playbook/mongo_deploy.yaml"
+  ANSIBLE_FORCE_COLOR: "true"
+  ANSIBLE_HOST_KEY_CHECKING: "False"
+
+ # repo Icinga
+  ICINGA_REPO_URL: "git.simpals.com/pavlik/new_icinga2.git"
+#  ICINGA_REPO_URL: "  http://git.simpals.com/pavlik/new_icinga2.git"
+  ICINGA_REPO_DIR: "ansible-icinga"
+  ICINGA_PLAYBOOK: "ansible-icinga/playbook.yml"   
+
+  # variabile de conectare la Icinga (le pui ca CI/CD protected/secret)
+  ICINGA_URL: "$ICINGA_URL"
+  ICINGA_USER: "$ICINGA_USER"
+  ICINGA_PASS: "$ICINGA_PASS"
+
+check:
+  stage: check
+  tags:
+    - shell-office-shared-runner
+  script:
+    - >
+     ansible-playbook  "$ANSIBLE_PLAYBOOK_CHECK"
+     --inventory-file ansible-mongo/inventory.yml
+  only:
+    - main
+
+
+mongo_copy:
+  stage: copy
+  tags:
+    - shell-office-shared-runner
+  before_script:
+    - ansible-galaxy collection install -r ansible-mongo/requirements.yml
+  script:
+    - >
+     ansible-playbook  "$ANSIBLE_PLAYBOOK_COPY"
+     --inventory-file ansible-mongo/inventory.yml
+  only:   
+    - main
+  when: manual
+
+
+mongo_deploy:
+  stage: deploy
+  tags:
+    - shell-office-shared-runner
+  before_script:
+    - ansible-galaxy collection install -r ansible-mongo/requirements.yml
+  script:
+    - >
+     ansible-playbook  "$ANSIBLE_PLAYBOOK_DEPLOY"
+     --inventory-file ansible-mongo/inventory.yml
+  only:
+    - main
+  when: manual
+
+
+icinga_deploy:
+  stage: monitoring
+  tags:
+    - shell-office-shared-runner
+  script:
+    - git clone "http://oauth2:${GITLAB_TOKEN}@${ICINGA_REPO_URL}" "$ICINGA_REPO_DIR"
+    - cd "$ICINGA_REPO_DIR"
+    - |
+      if [ -f requirements.yml ]; then
+        ansible-galaxy collection install -r requirements.yml
+      fi
+    - >
+      ansible-playbook "$ICINGA_PLAYBOOK"
+      -i ../ansible-mongo/inventory.yml
+
+    - git config user.name "gitlab-ci"
+    - git config user.email "gitlab-ci@simpals.com"
+
+    - |
+      if [ -n "$(git status --porcelain)" ]; then
+        git add .
+        git commit -m "Update Icinga config from mongodb_cluster ${CI_COMMIT_SHORT_SHA}"
+        git push "http://oauth2:${GITLAB_TOKEN}@${ICINGA_REPO_URL}" HEAD:main
+      else
+        echo "No changes to commit in Icinga repo."
+      fi
+  only:
+    - main
+  when: manual
+  needs:
+    - mongo_deploy
+
+

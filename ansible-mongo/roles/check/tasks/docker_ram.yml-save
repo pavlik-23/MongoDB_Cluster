@@ -1,0 +1,62 @@
+
+- name: Include unit_map pentru conversia RAM
+  include_vars: "{{ role_path }}/vars/docker_units.yml"
+
+- name: Colectează statistici Docker RAM (docker stats)
+  shell: docker stats --no-stream --format "{{'{{.Name}};{{.MemUsage}}'}}"
+  register: docker_stats_raw
+  changed_when: false
+  failed_when: docker_stats_raw.rc != 0
+
+- name: Inițializează listă goală pentru docker_ram_report
+  set_fact:
+    docker_ram_report: []
+
+- name: Parsează RAM Docker per container (manual per linie)
+  set_fact:
+    docker_ram_report: "{{ docker_ram_report + [ {
+      'name': parts[0],
+      'used_mb': '%.1f' | format((parts[1] | float * unit_map.get(parts[2], 1)) / 1024),
+      'limit_mb': '%.1f' | format((parts[3] | float * unit_map.get(parts[4], 1)) / 1024),
+      'percent': (
+        '%.1f%%' | format(
+          ((parts[1] | float * unit_map.get(parts[2], 1)) /
+          (parts[3] | float * unit_map.get(parts[4], 1)) * 100)
+          if (parts[3] | float) > 0 else 0.0
+        )
+      )
+    } ] }}"
+  loop: "{{ docker_stats_raw.stdout_lines }}"
+  vars:
+    parts: >-
+      {{
+        item
+        | regex_replace('^(.+);([0-9.]+)([KMG]iB)? / ([0-9.]+)([KMG]iB)?$', '\\1|\\2|\\3|\\4|\\5')
+        | split('|')
+        | map('trim')
+        | list
+      }}
+
+- name: Debug parts pentru linie Docker
+  debug:
+    msg: "{{ parts }}"
+  loop: "{{ docker_stats_raw.stdout_lines }}"
+  vars:
+    parts: >-
+      {{
+        item
+        | regex_replace('^(.+);([0-9.]+)([KMG]iB)? / ([0-9.]+)([KMG]iB)?$', '\\1|\\2|\\3|\\4|\\5')
+        | split('|')
+        | map('trim')
+        | list
+      }}
+
+
+
+- name: Afișează raport RAM Docker per container
+  debug:
+    msg: |
+      🐳 Docker containers RAM usage:
+      {% for c in docker_ram_report %}
+      - {{ c.name }} → {{ c.used_mb }} MB / {{ c.limit_mb }} MB ({{ c.percent }})
+      {% endfor %}

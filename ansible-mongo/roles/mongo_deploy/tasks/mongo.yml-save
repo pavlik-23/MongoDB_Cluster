@@ -1,0 +1,74 @@
+---
+- name: Ensure base directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ path }}"
+    - "{{ path }}/mongodb_data"
+    - "{{ path }}/mongodb_log"
+
+- name: Set ownership for data & log dirs (mongodb user 999:999)
+  file:
+    path: "{{ item }}"
+    owner: 999
+    group: 999
+    mode: "0755"
+  loop:
+    - "{{ path }}/mongodb_data"
+    - "{{ path }}/mongodb_log"
+
+
+- name: Template Docker Compose
+  template:
+    src: docker-compose.j2
+    dest: "{{ path }}/docker-compose.yml"
+  notify: Restart mongo (compose)
+
+- name: Template mongod.conf
+  template:
+    src: mongod.conf.j2
+    dest: "{{ path }}/mongod.conf"
+  notify: Restart mongo (compose)
+
+- name: Bring up Mongo via Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ path }}"
+    state: present
+    build: always
+
+# ===== Așteaptă să fie up =====
+- name: Wait for mongod TCP port
+  wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: "{{ mongo_port }}"
+    delay: 2
+    timeout: 120
+
+# ===== Inițializează replica set (doar pe primul host) =====
+- name: Build RS members list (host:port)
+  set_fact:
+    rs_members: >
+      [{% for h in groups['mongo'] -%}
+        {"_id": {{ loop.index0 }}, "host": "{{ hostvars[h].ansible_host | default(h) }}:{{ hostvars[h].mongo_port | default(mongo_port) }}"}{{ "," if not loop.last }}
+      {%- endfor %}]
+
+- name: Initiate RS on primary
+  when: inventory_hostname == groups['mongo'][0]
+  shell: >
+    docker exec {{ container_name }} mongosh --port {{ mongo_port }} --quiet --eval
+    'rs.initiate({_id:"{{ replicaset_name }}", members: {{ rs_members | to_json }}})'
+  register: rs_init
+  failed_when: rs_init.rc != 0 and ('already initialized' not in rs_init.stderr | lower and 'already initialized' not in rs_init.stdout | lower)
+  changed_when: "'ok' in rs_init.stdout or 'ok' in rs_init.stderr"
+
+- name: Wait for PRIMARY state
+  when: inventory_hostname == groups['mongo'][0]
+  shell: >
+    docker exec {{ container_name }} mongosh --port {{ mongo_port }} --quiet --eval
+    'while (rs.status().myState != 1) { sleep(1000); } "PRIMARY_READY"'
+  register: wait_primary
+  retries: 30
+  delay: 2
+  until: wait_primary.rc == 0

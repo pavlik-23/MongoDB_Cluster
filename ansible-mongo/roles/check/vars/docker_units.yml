@@ -1,0 +1,4 @@
+unit_map:
+  KiB: 1
+  MiB: 1024
+  GiB: 1048576

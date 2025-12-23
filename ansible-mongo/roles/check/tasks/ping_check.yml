@@ -1,0 +1,8 @@
+- name: Ping check activat?
+  ansible.builtin.debug:
+    msg: "Ping check activat pe acest host"
+  when: ping_check is defined and ping_check | bool
+
+- name: Execut ping dacă e activat
+  ansible.builtin.ping:
+  when: ping_check is defined and ping_check | bool

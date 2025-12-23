@@ -1,0 +1,38 @@
+- name: Check ports status (expecting CLOSED)
+  wait_for:
+    port: "{{ item }}"
+    host: "{{ inventory_hostname }}"
+    state: stopped
+    timeout: 2
+  with_items: "{{ check_ports }}"
+  register: port_check_result
+  ignore_errors: true
+
+- name: "Set fact: OPEN ports (listening)"
+  set_fact:
+    ports_open: >-
+      {{ port_check_result.results
+         | selectattr('failed', 'equalto', true)
+         | map(attribute='item')
+         | list }}
+  when: port_check_result is defined
+
+- name: "Set fact: CLOSED ports (not listening)"
+  set_fact:
+    ports_closed: >-
+      {{ port_check_result.results
+         | selectattr('failed', 'equalto', false)
+         | map(attribute='item')
+         | list }}
+  when: port_check_result is defined
+
+- name: "Display checked ports (✅ CLOSED / ❌ OPEN)"
+  debug:
+    msg: |
+      {% for port in check_ports %}
+      {{ "✅ CLOSED" if port in ports_closed else "❌ OPEN" }} : port {{ port }}
+      {% endfor %}
+  when:
+    - check_ports is defined
+    - ports_open is defined
+    - ports_closed is defined

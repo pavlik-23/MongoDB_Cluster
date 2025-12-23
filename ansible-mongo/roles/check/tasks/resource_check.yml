@@ -1,0 +1,151 @@
+- name: Încarcă variabilele pentru verificarea resurselor
+  include_vars: "{{ role_path }}/vars/resource_check.yml"
+
+# === RAM ===
+- name: Află RAM totală și liberă în MB
+  shell: "free -m | awk '/^Mem:/ { print $2 \",\" $7 }'"
+  register: ram_mb
+  changed_when: false
+
+- name: Sparge RAM în MB
+  set_fact:
+    ram_mb_split: "{{ ram_mb.stdout.split(',') }}"
+
+- name: Setează RAM totală/liberă în MB
+  set_fact:
+    ram_total_mb: "{{ ram_mb_split[0] | int }}"
+    ram_free_mb: "{{ ram_mb_split[1] | int }}"
+
+- name: Calculează RAM în GB și %
+  set_fact:
+    ram_total_gb: "{{ '%.2f' | format(ram_total_mb | float / 1024) }}"
+    ram_free_gb: "{{ '%.2f' | format(ram_free_mb | float / 1024) }}"
+    ram_free_pct: "{{ '%.1f' | format((ram_free_mb | float / ram_total_mb | float) * 100) }}%"
+
+- name: Debug RAM GB + %
+  debug:
+    msg: |
+      🧠 RAM: {{ ram_free_gb }} GB liberi din {{ ram_total_gb }} GB ({{ ram_free_pct }}%)
+
+
+# === Root (/) ===
+
+- name: Afișează root total & liber human-readable
+  shell: df -h / | awk 'NR==2 { print $2 "," $4 }'
+  register: disk_root_human
+  changed_when: false
+
+- name: Debug root human-readable
+  debug:
+    msg: "💾 Root (/): total: {{ disk_root_human.stdout.split(',')[0] | trim }}, free: {{ disk_root_human.stdout.split(',')[1] | trim }}"
+
+- name: Afișează root total & liber în MB
+  shell: df -Pm / | awk 'NR==2 { print $2 "," $4 }'
+  register: disk_root_mb
+  changed_when: false
+  failed_when: disk_root_mb.stdout == ""
+
+- name: Verifică dacă valorile root în MB sunt valide
+  assert:
+    that:
+      - disk_root_mb.stdout is defined
+      - disk_root_mb.stdout | length > 0
+      - disk_root_mb.stdout | regex_search(',')
+  vars:
+    ansible_assert_label: "Validare root MB"
+
+- name: Setează valori root total & liber în MB
+  set_fact:
+    root_total_mb: "{{ disk_root_mb.stdout.split(',')[0] | int }}"
+    root_free_mb: "{{ disk_root_mb.stdout.split(',')[1] | int }}"
+
+- name: Calculează root în GB și %
+  set_fact:
+    disk_total_gb: "{{ '%.1f' | format(root_total_mb | float / 1024) }}"
+    disk_free_gb: "{{ '%.1f' | format(root_free_mb | float / 1024) }}"
+    disk_free_pct: "{{ '%.1f' | format((root_free_mb | float / root_total_mb | float) * 100) }}%"
+
+- name: Debug root GB + %
+  debug:
+    msg: |
+      💾 Root (/): {{ disk_free_gb }} GB liberi din {{ disk_total_gb }} GB ({{ disk_free_pct }}%)
+
+
+
+# === /storage ===
+
+- name: Obține /storage total & liber în MB
+  shell: df -Pm /storage | awk 'NR==2 { print $2 "," $4 }'
+  register: storage_raw
+  changed_when: false
+  failed_when: false
+
+- name: Debug stdout /storage
+  debug:
+    msg: "📦 RAW /storage: {{ storage_raw.stdout }}"
+  when: storage_raw.stdout is defined
+
+- name: Setează valori MB pentru /storage (float safe)
+  set_fact:
+    storage_total_mb: "{{ storage_raw.stdout.split(',')[0] | float }}"
+    storage_free_mb: "{{ storage_raw.stdout.split(',')[1] | float }}"
+  when: >
+    storage_raw is defined and
+    storage_raw.stdout is defined and
+    ',' in storage_raw.stdout
+
+- name: Calculează /storage în GB și %
+  set_fact:
+    storage_total_gb: "{{ '%.1f' | format((storage_total_mb | float) / 1024) }}"
+    storage_free_gb: "{{ '%.1f' | format((storage_free_mb | float) / 1024) }}"
+    storage_free_pct: >-
+      {{
+        '%.1f' | format(((storage_free_mb | float) / (storage_total_mb | float)) * 100) + '%'
+        if (storage_total_mb | float) > 0 else 'N/A'
+      }}
+  when:
+    - storage_total_mb is defined
+    - storage_free_mb is defined
+    - (storage_total_mb | float) > 0
+
+- name: Debug /storage GB + %
+  debug:
+    msg: "📊 /storage: {{ storage_free_gb }} GB liberi din {{ storage_total_gb }} GB ({{ storage_free_pct }}%)"
+  when:
+    - storage_total_gb is defined
+    - storage_free_gb is defined
+    - storage_free_pct is defined
+
+
+
+
+# === CPU ===
+- name: Obține load average
+  command: awk '{print $1}' /proc/loadavg
+  register: cpu_load_avg_raw
+  changed_when: false
+
+- name: Obține numărul de core-uri
+  command: nproc
+  register: cpu_cores_raw
+  changed_when: false
+
+- name: Verifică load avg și core-uri valide
+  assert:
+    that:
+      - cpu_load_avg_raw.stdout is defined
+      - cpu_cores_raw.stdout is defined
+
+- name: Setează facturi CPU
+  set_fact:
+    cpu_load_avg: "{{ cpu_load_avg_raw.stdout | float }}"
+    cpu_cores: "{{ cpu_cores_raw.stdout | int }}"
+
+- name: Calculează utilizare CPU în %
+  set_fact:
+    cpu_percent: "{{ '%.1f' | format((cpu_load_avg | float / cpu_cores | float) * 100) }}%"
+
+- name: Afișează utilizarea CPU
+  debug:
+    msg: "🔥 CPU usage: {{ cpu_percent }}% ({{ cpu_load_avg }} load / {{ cpu_cores }} core-uri)"
+ 

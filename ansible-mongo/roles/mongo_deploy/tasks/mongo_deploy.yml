@@ -1,0 +1,78 @@
+---
+- name: Bring up Mongo via Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ path }}"
+    state: present
+    build: always
+
+# ===== Așteaptă să fie up =====
+- name: Wait for mongod TCP port
+  wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: "{{ mongo_port }}"
+    delay: 2
+    timeout: 120
+
+# ===== Inițializează replica set (doar pe primul host) =====
+- name: Build RS members list (host:port)
+  set_fact:
+    rs_members: >
+      [{% for h in groups['mongo'] -%}
+        {"_id": {{ loop.index0 }}, "host": "{{ hostvars[h].ansible_host | default(h) }}:{{ hostvars[h].mongo_port | default(mongo_port) }}"}{{ "," if not loop.last }}
+      {%- endfor %}]
+
+- name: Initiate RS on primary
+  when: inventory_hostname == groups['mongo'][0]
+  shell: >
+    docker exec {{ project_name }}-{{ service_name }}-1  mongosh --port {{ mongo_port }} --quiet --eval
+    'rs.initiate({_id:"{{ replicaset_name }}", members: {{ rs_members | to_json }}})'
+  register: rs_init
+  failed_when: rs_init.rc != 0 and ('already initialized' not in (rs_init.stderr | lower)) and ('already initialized' not in (rs_init.stdout | lower))
+  changed_when: "'ok' in (rs_init.stdout | lower) or 'ok' in (rs_init.stderr | lower)"
+
+# ===== Așteaptă până când ORICARE membru devine PRIMARY =====
+- name: Wait until any member is PRIMARY
+  run_once: true
+  delegate_to: "{{ groups['mongo'][0] }}"
+  shell: >
+    docker exec {{ project_name }}-{{ service_name }}-1
+    mongosh "mongodb://127.0.0.1:{{ mongo_port }}/?replicaSet={{ replicaset_name }}"
+    --quiet --eval 'var s=rs.status(); (s.ok===1 || s.ok===true) && (s.members||[]).some(m=>m.stateStr==="PRIMARY") ? "PRIMARY_OK" : "NO"'
+  register: rs_primary_check
+  changed_when: false
+  retries: 60
+  delay: 3
+  until: rs_primary_check.stdout is search('PRIMARY_OK')
+
+# ===== Afișează PRIMARY ales =====
+- name: Get elected PRIMARY endpoint
+  run_once: true
+  delegate_to: "{{ groups['mongo'][0] }}"
+  shell: >
+    docker exec {{ project_name }}-{{ service_name }}-1
+    mongosh "mongodb://127.0.0.1:{{ mongo_port }}/?replicaSet={{ replicaset_name }}"
+    --quiet --eval '(rs.status().members||[]).filter(m=>m.stateStr==="PRIMARY").map(m=>m.name)[0]'
+  register: rs_primary_endpoint
+  changed_when: false
+
+- name: Show PRIMARY
+  run_once: true
+  debug:
+    msg: "PRIMARY ales: {{ rs_primary_endpoint.stdout | trim }}"
+
+# ===== Afișează rs.status() (rezumat util: name + stateStr) =====
+- name: Show replica set members state (PRIMARY/SECONDARY/etc)
+  run_once: true
+  delegate_to: "{{ groups['mongo'][0] }}"
+  shell: >
+    docker exec {{ project_name }}-{{ service_name }}-1
+    mongosh "mongodb://127.0.0.1:{{ mongo_port }}/?replicaSet={{ replicaset_name }}"
+    --quiet --eval 'var s=rs.status(); (s.members||[]).map(m=>({name:m.name,stateStr:m.stateStr,health:m.health,uptime:m.uptime}));'
+  register: rs_members_state
+  changed_when: false
+
+- name: Print rs.status() summary
+  run_once: true
+  debug:
+    var: rs_members_state.stdout
+

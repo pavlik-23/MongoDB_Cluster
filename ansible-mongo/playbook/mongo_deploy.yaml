@@ -1,0 +1,7 @@
+---
+- name: Create MongoDB Docker Compose
+  hosts: mongo
+  gather_facts: true
+  roles:
+    - ../roles/mongo_deploy
+

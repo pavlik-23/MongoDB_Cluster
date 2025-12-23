@@ -1,0 +1,44 @@
+
+
+check:
+  hosts:
+    "192.168.1.57":
+      ansible_user: root
+      ping_check: true
+      check_ports: [27997]
+    "192.168.1.59":
+      ansible_user: root
+      ping_check: true
+      check_ports: [27997] 
+    "192.168.1.79":
+      ansible_user: root
+      ping_check: true
+      check_ports: [27997] 
+
+mongo:
+  hosts:
+    "192.168.1.57":
+      ansible_user: root
+      ping_check: true
+    "192.168.1.59":
+      ansible_user: root
+      ping_check: true
+    "192.168.1.79":
+      ansible_user: root
+      ping_check: true
+
+all:
+  vars:
+    project_name: mongodb_27997
+    service_name: 999-business-api
+    mongo_image: 'mongo:8.0.6' 
+    mem_limit: '8192m'
+
+    cache_size: '4'
+    opolog_size: '2048'
+    mongo_port: 27997
+
+    path: "/storage/mongodb/{{ project_name }}"
+    replicaset_name: '{{ project_name }}'
+
+    mongo_rs_verbose: false

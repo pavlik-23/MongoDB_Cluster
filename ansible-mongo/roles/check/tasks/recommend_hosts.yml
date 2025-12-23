@@ -1,0 +1,102 @@
+---
+# Rulează O SINGURĂ DATĂ, pe localhost, după ce fiecare host și-a calculat ram_free_mb / storage_free_mb
+- name: Build candidates list from hostvars
+  run_once: true
+  delegate_to: localhost
+  vars:
+    tg: "{{ target_group }}"
+  set_fact:
+    candidates: >-
+      [
+      {%- for h in groups[tg] | default([]) -%}
+        {
+          "host": "{{ h }}",
+          "ip": "{{ hostvars[h].ansible_host | default(h) }}",
+          "ram_free_gb": {{ ((hostvars[h].ram_free_mb | default(0) | float) / 1024) | round(2) }},
+          "storage_free_gb": {{ (
+              (hostvars[h].storage_free_mb is defined)
+              | ternary( (hostvars[h].storage_free_mb | float) / 1024, 0.0 )
+            ) | round(1) }},
+          "score": {{ (
+              (((hostvars[h].ram_free_mb | default(0) | float) / 1024) * (weight_ram | float)) +
+              ((((hostvars[h].storage_free_mb | default(0) | float) / 1024) * (weight_storage | float)))
+            ) | round(3) }}
+        }{{ "," if not loop.last else "" }}
+      {%- endfor -%}
+      ]
+
+- name: Filter eligible by thresholds
+  run_once: true
+  delegate_to: localhost
+  set_fact:
+    eligible: >-
+      {{ candidates
+         | selectattr('ram_free_gb','ge', (min_ram_gb | float))
+         | selectattr('storage_free_gb','ge', (min_storage_gb | float))
+         | list }}
+
+# Dacă niciun host nu trece pragurile, folosim TOȚI candidații (fallback) ca să nu rămâi fără recomandare
+- name: Decide pool used
+  run_once: true
+  delegate_to: localhost
+  set_fact:
+    pool: "{{ (eligible | length > 0) | ternary(eligible, candidates) }}"
+
+- name: Sort pool by score (desc)
+  run_once: true
+  delegate_to: localhost
+  set_fact:
+    sorted_hosts: "{{ pool | sort(attribute='score', reverse=True) }}"
+
+- name: Pick primary & secondaries
+  run_once: true
+  delegate_to: localhost
+  set_fact:
+    recommended_primary: "{{ sorted_hosts[0] if (sorted_hosts | length) > 0 else omit }}"
+    recommended_secondaries: "{{ sorted_hosts[1:3] if (sorted_hosts | length) > 1 else [] }}"
+
+- name: Print ranking table
+  run_once: true
+  delegate_to: localhost
+  debug:
+    msg: |
+      📋 Clasament candidați (scor = RAM*{{ weight_ram }} + STORAGE*{{ weight_storage }})
+      {% for c in sorted_hosts %}
+      - {{ "%-15s"|format(c.host) }}  ip={{ c.ip }}   RAM={{ "%5.2f"|format(c.ram_free_gb) }} GB   STORAGE={{ "%6.1f"|format(c.storage_free_gb) }} GB   score={{ c.score }}
+      {% endfor %}
+
+- name: Recommendation summary
+  run_once: true
+  delegate_to: localhost
+  debug:
+    msg: |
+      ✅ PRIMARY recomandat: {{ recommended_primary.host }} (ip={{ recommended_primary.ip }}, RAM={{ recommended_primary.ram_free_gb }} GB, STORAGE={{ recommended_primary.storage_free_gb }} GB, score={{ recommended_primary.score }})
+      ✅ SECONDARY recomandate: {% for s in recommended_secondaries %}{{ s.host }}(ip={{ s.ip }}, RAM={{ s.ram_free_gb }} GB, STORAGE={{ s.storage_free_gb }} GB, score={{ s.score }}){% if not loop.last %}, {% endif %}{% endfor %}
+
+# (opțional) Salvează rezultatul pe controller ca JSON
+- name: Write JSON report locally
+  run_once: true
+  delegate_to: localhost
+  copy:
+    content: "{{ {'ranking': sorted_hosts, 'primary': recommended_primary, 'secondaries': recommended_secondaries} | to_nice_json }}"
+    dest: "/tmp/mongo_cluster_candidates.json"
+    mode: "0644"
+
+# (opțional) Creează grupuri dinamice pentru play-urile următoare
+- name: Add PRIMARY to dynamic group rs_primary
+  when: recommended_primary is defined
+  run_once: true
+  delegate_to: localhost
+  add_host:
+    name: "{{ recommended_primary.host }}"
+    groups: rs_primary
+
+- name: Add SECONDARIES to dynamic group rs_secondary
+  when: recommended_secondaries | length > 0
+  run_once: true
+  delegate_to: localhost
+  loop: "{{ recommended_secondaries }}"
+  loop_control: { label: "{{ item.host }}" }
+  add_host:
+    name: "{{ item.host }}"
+    groups: rs_secondary

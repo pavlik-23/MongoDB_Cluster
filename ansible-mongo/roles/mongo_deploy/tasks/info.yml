@@ -1,0 +1,79 @@
+- name: Colectează rs.status() ca JSON
+  shell: >
+    docker exec {{ project_name }}-{{ service_name }}-1
+    mongosh "mongodb://127.0.0.1:{{ mongo_port }}/?replicaSet={{ replicaset_name }}"
+    --quiet --eval 'JSON.stringify(rs.status())'
+  register: rsstat_raw
+  changed_when: false
+
+- name: Parsează rs.status()
+  set_fact:
+    rsstat: "{{ rsstat_raw.stdout | from_json }}"
+
+- name: Rezumat replicaset (PRIMARY/SECONDARY + health)
+  debug:
+    msg: |
+      Set: {{ rsstat.set }} | term: {{ rsstat.term | default('n/a') }}
+      PRIMARY: {{ (rsstat.members | selectattr('stateStr','eq','PRIMARY') | map(attribute='name') | list | join(', ')) | default('unknown') }}
+      Membri:
+      {%- for m in rsstat.members %}
+        - {{ "%-22s"|format(m.name) }} {{ "%-9s"|format(m.stateStr) }} health={{ m.health }} pingMs={{ m.pingMs | default('n/a') }} optime={{ m.optimeDate | default('') }}
+      {%- endfor %}
+
+
+# ---- Colectează rs.status() SLIM ca JSON (scurt) ----
+- name: Colectează rs.status() (slim JSON)
+  shell: >
+    docker exec {{ project_name }}-{{ service_name }}-1 mongosh --port {{ mongo_port }} --quiet --eval
+    "JSON.stringify((() => {
+      const s = rs.status();
+      const primary = (s.members.find(x => x.stateStr === 'PRIMARY')?.name || '');
+      const ping = v => (typeof v === 'number') ? v : ((v && typeof v === 'object' && 'low' in v) ? v.low : 'n/a');
+      return {
+        set: s.set,
+        term: s.term,
+        primary,
+        members: s.members.map(m => ({
+          name: m.name,
+          stateStr: m.stateStr,
+          health: m.health,
+          pingMs: ping(m.pingMs),
+          optimeDate: m.optimeDate
+        }))
+      };
+    })())"
+  register: rs_status_raw
+  changed_when: false
+  failed_when: rs_status_raw.rc != 0 or (rs_status_raw.stdout | length) == 0
+
+- name: Parsează rs.status() slim
+  set_fact:
+    rs_status_parsed: "{{ rs_status_raw.stdout | from_json }}"
+
+# ---- Rezumat compact (lizibil) ----
+- name: Construiește rezumat compact din rs.status()
+  vars:
+    s: "{{ rs_status_parsed }}"
+  set_fact:
+    rs_summary_lines: |
+      Set: {{ s.set }} | PRIMARY: {{ s.primary }}
+      {% for m in s.members -%}
+      - {{ "%-22s"|format(m.name) }} {{ "%-9s"|format(m.stateStr) }} health={{ m.health }} ping={{ m.pingMs }} optime={{ m.optimeDate }}
+      {% endfor %}
+
+- name: Afișează rezumatul (compact)
+  debug:
+    msg: "{{ rs_summary_lines }}"
+
+# ---- Dump complet doar la nevoie ----
+- name: Afișează rs.status() complet (doar când mongo_rs_verbose=true)
+  when: (mongo_rs_verbose | default(false) | bool)
+  shell: >
+    docker exec {{ project_name }}-{{ service_name }}-1 mongosh --port {{ mongo_port }} --quiet --eval "rs.status()"
+  register: rs_status_full
+  changed_when: false
+
+- name: Debug rs.status() (complet)
+  when: (mongo_rs_verbose | default(false) | bool)
+  debug:
+    var: rs_status_full.stdout

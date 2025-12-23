@@ -1,0 +1,59 @@
+- name: Calculate total Docker RAM used (MB)
+  set_fact:
+    docker_ram_total_used_mb: "{{ docker_ram_report | map(attribute='used_mb') | map('float') | sum | round(1) }}"
+
+- name: Calculate total Docker RAM limit (MB)
+  set_fact:
+    docker_ram_total_limit_mb: "{{ docker_ram_report | map(attribute='limit_mb') | map('float') | sum | round(1) }}"
+
+- name: Calculate host total RAM in MB
+  set_fact:
+    host_total_ram_mb: "{{ host_check_result.ram.total_gb | float * 1024 }}"
+
+- name: Calculate available RAM after Docker RAM limit
+  set_fact:
+    docker_ram_limit_gap_mb: "{{ (host_total_ram_mb | float - docker_ram_total_limit_mb | float) | round(1) }}"
+
+- name: Generate HTML report per host
+  copy:
+    dest: "/tmp/precheck_report_{{ inventory_hostname }}.html"
+    content: |
+      <html>
+      <head><title>Health Report - {{ host_check_result.hostname }}</title></head>
+      <body>
+        <h1>🖥️ Host: {{ host_check_result.hostname }}</h1>
+        <ul>
+          <li>📡 Ping: {{ '✅ OK' if host_check_result.ping else '❌ FAIL' }}</li>
+          <li>🔌 Ports checked: {{ host_check_result.ports_required | join(', ') }}</li>
+          <li>✅ Open ports: {{ host_check_result.ports_open | join(', ') if host_check_result.ports_open else 'None' }}</li>
+          <li>❌ Closed ports: {{ host_check_result.ports_closed | join(', ') if host_check_result.ports_closed else 'None' }}</li>
+        </ul>
+
+        <h2>🧠 RAM</h2>
+        <p>Free: {{ host_check_result.ram.free_gb }} GB out of {{ host_check_result.ram.total_gb }} GB ({{ host_check_result.ram.free_pct }})</p>
+
+        <h2>🔥 CPU</h2>
+        <p>{{ host_check_result.cpu.load_avg }} load / {{ host_check_result.cpu.cores }} cores ({{ host_check_result.cpu.load_pct }})</p>
+
+        <h2>💾 Root Filesystem</h2>
+        <p>{{ host_check_result.disk_root.free_gb }} GB free out of {{ host_check_result.disk_root.total_gb }} GB ({{ host_check_result.disk_root.free_pct }})</p>
+
+        <h2>📁 /storage Partition</h2>
+        <p>{{ host_check_result.disk_storage.free_gb }} GB free out of {{ host_check_result.disk_storage.total_gb }} GB ({{ host_check_result.disk_storage.free_pct }})</p>
+
+        <h2>🐳 Docker RAM Usage</h2>
+        {% if docker_ram_report | length > 0 %}
+          <ul>
+            {% for c in docker_ram_report %}
+              <li>{{ c.name }} → {{ c.used_mb }} MB used / {{ c.limit_mb }} MB limit ({{ c.percent }})</li>
+            {% endfor %}
+          </ul>
+          <p><strong>Total Used:</strong> {{ docker_ram_total_used_mb }} MB</p>
+          <p><strong>Total Limit:</strong> {{ docker_ram_total_limit_mb }} MB</p>
+          <p><strong>Remaining (Host RAM - Docker Limit):</strong> {{ docker_ram_limit_gap_mb }} MB</p>
+        {% else %}
+          <p>No Docker containers running or accessible.</p>
+        {% endif %}
+      </body>
+      </html>
+  delegate_to: localhost

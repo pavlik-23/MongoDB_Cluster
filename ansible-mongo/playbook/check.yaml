@@ -1,0 +1,5 @@
+- hosts: check
+  become: yes
+  gather_facts: false
+  roles:
+    - ../roles/check

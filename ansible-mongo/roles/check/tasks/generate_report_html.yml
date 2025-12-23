@@ -1,0 +1,125 @@
+- name: Generate RAM stats for HTML
+  set_fact:
+    docker_ram_total_used_mb: "{{ host_check_result.docker_ram | map(attribute='used_mb') | map('float') | sum | round(1) }}"
+    docker_ram_total_limit_mb: "{{ host_check_result.docker_ram | map(attribute='limit_mb') | map('float') | sum | round(1) }}"
+    host_total_ram_mb: "{{ (host_check_result.ram.total_gb | float * 1024) | round(1) }}"
+    docker_ram_diff_mb: "{{ host_total_ram_mb | float - docker_ram_total_limit_mb | float | round(1) }}"
+
+
+- name: Write dark-themed HTML report
+  copy:
+    dest: "/tmp/precheck_report_{{ inventory_hostname }}.html"
+    content: |
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>PreCheck Report – {{ host_check_result.hostname }}</title>
+        <style>
+          body {
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', sans-serif;
+            margin: 20px;
+          }
+          h2, h3 {
+            color: #ffffff;
+          }
+          table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 10px;
+          }
+          th, td {
+            border: 1px solid #444;
+            padding: 8px;
+            text-align: left;
+          }
+          th {
+            background-color: #222;
+            color: #fff;
+          }
+          td {
+            background-color: #1a1a1a;
+          }
+          .bar {
+            height: 16px;
+            background-color: #4caf50;
+            display: inline-block;
+          }
+          .warn {
+            background-color: #d9534f;
+            color: #fff;
+            padding: 12px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-weight: bold;
+          }
+          .ok {
+            background-color: #5cb85c;
+            color: #fff;
+            padding: 12px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-weight: bold;
+          }
+        </style>
+      </head>
+      <body>
+
+        <h2>PreCheck Report – {{ host_check_result.hostname }}</h2>
+
+        <h3>🧠 System</h3>
+        <p><b>Ping:</b> {{ "✅ OK" if host_check_result.ping else "❌ FAIL" }}</p>
+        <p><b>CPU:</b> {{ host_check_result.cpu.load_avg }} / {{ host_check_result.cpu.cores }} cores ({{ host_check_result.cpu.load_pct }})</p>
+        <p><b>RAM:</b> {{ host_check_result.ram.free_gb }} GB free from {{ host_check_result.ram.total_gb }} GB ({{ host_check_result.ram.free_pct }})</p>
+
+        <h3>💽 Disks</h3>
+        <p><b>Root:</b> {{ host_check_result.disk_root.free_gb }} GB free from {{ host_check_result.disk_root.total_gb }} GB ({{ host_check_result.disk_root.free_pct }})</p>
+        <p><b>/storage:</b> {{ host_check_result.disk_storage.free_gb }} GB free from {{ host_check_result.disk_storage.total_gb }} GB ({{ host_check_result.disk_storage.free_pct }})</p>
+
+        <h3>🔌 Ports</h3>
+        <p><b>Required:</b> {{ host_check_result.ports_required | join(', ') }}</p>
+        <p style="color: #f0ad4e;"><b>Open:</b> {{ host_check_result.ports_open | join(', ') if host_check_result.ports_open else "None" }}</p>
+        <p style="color: #5bc0de;"><b>Closed:</b> {{ host_check_result.ports_closed | join(', ') if host_check_result.ports_closed else "None" }}</p>
+
+        <h3>🐳 Docker RAM Summary</h3>
+        <p><b>Total Used:</b> {{ docker_ram_total_used_mb }} MB</p>
+        <p><b>Limit Allocated:</b> {{ docker_ram_total_limit_mb }} MB</p>
+        <p><b>Host Total RAM:</b> {{ host_total_ram_mb }} MB</p>
+
+        {% if docker_ram_diff_mb | float < 0 %}
+        <div class="warn">⚠️ Warning: Docker containers are overcommitting memory!<br>
+        Remaining RAM after Docker limits: {{ docker_ram_diff_mb }} MB</div>
+        {% else %}
+        <div class="ok">✅ Remaining RAM after Docker limits: {{ docker_ram_diff_mb }} MB</div>
+        {% endif %}
+
+        {% if host_check_result.docker_ram | length > 0 %}
+        <h3>🐳 Docker Containers RAM Usage</h3>
+        <table>
+          <tr>
+            <th>Container</th>
+            <th>Used (MB)</th>
+            <th>Limit (MB)</th>
+            <th>Usage %</th>
+            <th>Visual</th>
+          </tr>
+          {% for c in host_check_result.docker_ram %}
+          <tr>
+            <td>{{ c.name }}</td>
+            <td>{{ c.used_mb }}</td>
+            <td>{{ c.limit_mb }}</td>
+            <td>{{ c.percent }}</td>
+            <td>
+              <div class="bar" style="width: {{ c.percent | replace('%','') | float * 2 }}px;"></div>
+            </td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% else %}
+        <p>No Docker containers detected.</p>
+        {% endif %}
+
+      </body>
+      </html>
+  delegate_to: localhost

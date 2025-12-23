@@ -1,0 +1,60 @@
+- name: Generate full HTML report
+  copy:
+    dest: "/tmp/precheck_report_{{ inventory_hostname }}.html"
+    content: |
+      <html>
+      <head>
+        <style>
+          body { font-family: sans-serif; }
+          h2 { border-bottom: 1px solid #ccc; }
+          table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
+          th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+          th { background-color: #f2f2f2; }
+        </style>
+      </head>
+      <body>
+        <h2>PreCheck Report – {{ inventory_hostname }}</h2>
+
+        <h3>🖥️ System</h3>
+        <p><b>Ping:</b> {{ 'OK ✅' if host_check_result.ping else 'FAIL ❌' }}</p>
+        <p><b>CPU:</b> {{ host_check_result.cpu.load_avg }} / {{ host_check_result.cpu.cores }} cores ({{ host_check_result.cpu.load_pct }})</p>
+        <p><b>RAM:</b> {{ host_check_result.ram.free_gb }} GB free of {{ host_check_result.ram.total_gb }} GB ({{ host_check_result.ram.free_pct }})</p>
+
+        <h3>💽 Disks</h3>
+        <p><b>Root (/):</b> {{ host_check_result.disk_root.free_gb }} GB free of {{ host_check_result.disk_root.total_gb }} GB ({{ host_check_result.disk_root.free_pct }})</p>
+        <p><b>/storage:</b> {{ host_check_result.disk_storage.free_gb }} GB free of {{ host_check_result.disk_storage.total_gb }} GB ({{ host_check_result.disk_storage.free_pct }})</p>
+
+        <h3>🔌 Ports</h3>
+        <p><b>Required:</b> {{ host_check_result.ports_required | join(', ') }}</p>
+        <p><b>✅ Open:</b> {{ host_check_result.ports_open | join(', ') if host_check_result.ports_open else 'None' }}</p>
+        <p><b>❌ Closed:</b> {{ host_check_result.ports_closed | join(', ') if host_check_result.ports_closed else 'None' }}</p>
+
+        <h3>🐳 Docker RAM (Total: {{ docker_ram_total_used_mb }} MB)</h3>
+        <p>💡 Host total RAM: {{ host_total_ram_mb }} MB</p>
+        <p>💡 Docker RAM limit (sum): {{ docker_ram_total_limit_mb }} MB</p>
+        <p>🧮 Remaining usable RAM: {{ docker_ram_diff_mb }} MB</p>
+
+        {% if host_check_result.docker_ram | length > 0 %}
+        <table>
+          <tr>
+            <th>Container</th>
+            <th>Used RAM (MB)</th>
+            <th>Limit (MB)</th>
+            <th>%</th>
+          </tr>
+          {% for c in host_check_result.docker_ram %}
+          <tr>
+            <td>{{ c.name }}</td>
+            <td>{{ c.used_mb }}</td>
+            <td>{{ c.limit_mb }}</td>
+            <td>{{ c.percent }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% else %}
+        <p>No Docker containers running or accessible.</p>
+        {% endif %}
+
+      </body>
+      </html>
+  delegate_to: localhost

@@ -1,0 +1,5 @@
+resource_min_requirements:
+  ram_mb: 512
+  disk_mb: 8192
+  load_avg_max: 15.0
+

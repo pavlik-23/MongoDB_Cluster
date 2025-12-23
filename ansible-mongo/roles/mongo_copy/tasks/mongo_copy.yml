@@ -1,0 +1,33 @@
+---
+- name: Ensure base directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ path }}"
+    - "{{ path }}/mongodb_data"
+    - "{{ path }}/mongodb_log"
+
+- name: Set ownership for data & log dirs (mongodb user 999:999)
+  file:
+    path: "{{ item }}"
+    owner: 999
+    group: 999
+    mode: "0755"
+  loop:
+    - "{{ path }}/mongodb_data"
+    - "{{ path }}/mongodb_log"
+
+- name: Template Docker Compose
+  template:
+    src: docker-compose.j2
+    dest: "{{ path }}/docker-compose.yml"
+  notify: Restart mongo (compose)
+
+- name: Template mongod.conf
+  template:
+    src: mongod.conf.j2
+    dest: "{{ path }}/mongod.conf"
+  notify: Restart mongo (compose)
+
