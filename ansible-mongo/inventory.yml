@@ -29,6 +29,7 @@ mongo:
 
 all:
   vars:
+    ansible_python_interpreter: /usr/bin/python3
     project_name: mongodb_27017
     service_name: lab_github
     mongo_image: 'mongo:8.0.6' 
