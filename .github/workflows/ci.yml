@@ -18,6 +18,7 @@ on:
 env:
   ANSIBLE_PLAYBOOK_CHECK: ansible-mongo/playbook/check.yaml
   ANSIBLE_PLAYBOOK_DEPLOY: ansible-mongo/playbook/mongo_deploy.yaml
+  ANSIBLE_INVENTORY: ansible-mongo/inventory.yml
   ANSIBLE_FORCE_COLOR: "true"
   ANSIBLE_HOST_KEY_CHECKING: "False"
 
@@ -25,26 +26,27 @@ jobs:
   check:
     name: Check
     runs-on: self-hosted
+    container:
+      image: librespace/ansible:9.13.0
     if: github.event_name == 'push' || github.event.inputs.job_to_run == 'check'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Start ssh-agent and add private key
+      - name: Setup SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          which ssh-agent || (sudo apt-get update && sudo apt-get install -y openssh-client dnsutils)
+          which ssh-agent || (apk add --no-cache openssh-client bind-tools)
           eval "$(ssh-agent -s)"
-          echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          cat > ~/.ssh/config <<EOF
-          Host *
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-          EOF
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/github_action_key
+          chmod 600 ~/.ssh/github_action_key
+          ssh-keygen -y -f ~/.ssh/github_action_key > /dev/null
+          ssh-add ~/.ssh/github_action_key
+          printf "Host *\n\tStrictHostKeyChecking no\n\tUserKnownHostsFile /dev/null\n" > ~/.ssh/config
           chmod 600 ~/.ssh/config
 
       - name: Show Ansible version
@@ -53,37 +55,41 @@ jobs:
       - name: Run check playbook
         run: |
           ansible-playbook "$ANSIBLE_PLAYBOOK_CHECK" \
-            --inventory-file ansible-mongo/inventory.yml
+            --inventory-file "$ANSIBLE_INVENTORY"
 
   mongo_deploy:
     name: Deploy
     runs-on: self-hosted
+    container:
+      image: librespace/ansible:9.13.0
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'deploy'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-     
-      - name: Start ssh-agent and add private key
+
+      - name: Setup SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-        run: |   
-          which ssh-agent || (sudo apt-get update && sudo apt-get install -y openssh-client dnsutils)
+        run: |
+          which ssh-agent || (apk add --no-cache openssh-client bind-tools)
           eval "$(ssh-agent -s)"
-          echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          cat > ~/.ssh/config <<EOF
-          Host *
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-          EOF
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/github_action_key
+          chmod 600 ~/.ssh/github_action_key
+          ssh-keygen -y -f ~/.ssh/github_action_key > /dev/null
+          ssh-add ~/.ssh/github_action_key
+          printf "Host *\n\tStrictHostKeyChecking no\n\tUserKnownHostsFile /dev/null\n" > ~/.ssh/config
           chmod 600 ~/.ssh/config
 
       - name: Install Ansible collections
-        run: ansible-galaxy collection install -r ansible-mongo/requirements.yml
+        run: |
+          if [ -f ansible-mongo/requirements.yml ]; then
+            ansible-galaxy collection install -r ansible-mongo/requirements.yml
+          fi
 
       - name: Run deploy playbook
         run: |
           ansible-playbook "$ANSIBLE_PLAYBOOK_DEPLOY" \
-            --inventory-file ansible-mongo/inventory.yml
+            --inventory-file "$ANSIBLE_INVENTORY"
