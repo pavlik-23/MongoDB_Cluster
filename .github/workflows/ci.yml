@@ -26,8 +26,8 @@ jobs:
   check:
     name: Check
     runs-on: self-hosted
-    container:
-      image: librespace/ansible:9.13.0
+#    container:
+#      image: librespace/ansible:9.13.0
     if: github.event_name == 'push' || github.event.inputs.job_to_run == 'check'
 
     steps:
@@ -60,8 +60,8 @@ jobs:
   mongo_deploy:
     name: Deploy
     runs-on: self-hosted
-    container:
-      image: librespace/ansible:9.13.0
+#    container:
+#      image: librespace/ansible:9.13.0
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'deploy'
 
     steps:
