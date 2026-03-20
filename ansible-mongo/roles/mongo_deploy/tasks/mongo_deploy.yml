@@ -1,11 +1,43 @@
 ---
+
+- name: Ensure base directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ path }}"
+    - "{{ path }}/mongodb_data"
+    - "{{ path }}/mongodb_log"
+
+- name: Set ownership for data & log dirs (mongodb user 999:999)
+  file:
+    path: "{{ item }}"
+    owner: 999
+    group: 999
+    mode: "0755"
+  loop:
+    - "{{ path }}/mongodb_data"
+    - "{{ path }}/mongodb_log"
+
+- name: Template Docker Compose
+  template:
+    src: docker-compose.j2
+    dest: "{{ path }}/docker-compose.yml"
+  notify: Restart mongo (compose)
+
+- name: Template mongod.conf
+  template:
+    src: mongod.conf.j2
+    dest: "{{ path }}/mongod.conf"
+  notify: Restart mongo (compose)
+
 - name: Bring up Mongo via Docker Compose
   community.docker.docker_compose_v2:
     project_src: "{{ path }}"
     state: present
     build: always
 
-# ===== Așteaptă să fie up =====
 - name: Wait for mongod TCP port
   wait_for:
     host: "{{ ansible_host | default(inventory_hostname) }}"
@@ -13,7 +45,6 @@
     delay: 2
     timeout: 120
 
-# ===== Inițializează replica set (doar pe primul host) =====
 - name: Build RS members list (host:port)
   set_fact:
     rs_members: >
@@ -30,7 +61,6 @@
   failed_when: rs_init.rc != 0 and ('already initialized' not in (rs_init.stderr | lower)) and ('already initialized' not in (rs_init.stdout | lower))
   changed_when: "'ok' in (rs_init.stdout | lower) or 'ok' in (rs_init.stderr | lower)"
 
-# ===== Așteaptă până când ORICARE membru devine PRIMARY =====
 - name: Wait until any member is PRIMARY
   run_once: true
   delegate_to: "{{ groups['mongo'][0] }}"
@@ -44,7 +74,6 @@
   delay: 3
   until: rs_primary_check.stdout is search('PRIMARY_OK')
 
-# ===== Afișează PRIMARY ales =====
 - name: Get elected PRIMARY endpoint
   run_once: true
   delegate_to: "{{ groups['mongo'][0] }}"
@@ -60,7 +89,6 @@
   debug:
     msg: "PRIMARY ales: {{ rs_primary_endpoint.stdout | trim }}"
 
-# ===== Afișează rs.status() (rezumat util: name + stateStr) =====
 - name: Show replica set members state (PRIMARY/SECONDARY/etc)
   run_once: true
   delegate_to: "{{ groups['mongo'][0] }}"
