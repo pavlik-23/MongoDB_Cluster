@@ -1,0 +1,58 @@
+name: MongoDB Ansible CI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      job_to_run:
+        description: "Choose which manual job to run"
+        required: true
+        default: "check"
+        type: choice
+        options:
+          - check
+          - copy
+          - deploy
+
+env:
+  ANSIBLE_PLAYBOOK_CHECK: ansible-mongo/playbook/check.yaml
+  ANSIBLE_PLAYBOOK_DEPLOY: ansible-mongo/playbook/mongo_deploy.yaml
+  ANSIBLE_FORCE_COLOR: "true"
+  ANSIBLE_HOST_KEY_CHECKING: "False"
+
+jobs:
+  check:
+    name: Check
+    runs-on: self-hosted
+    if: github.event_name == 'push' || github.event.inputs.job_to_run == 'check'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show Ansible version
+        run: ansible --version
+
+      - name: Run check playbook
+        run: |
+          ansible-playbook "$ANSIBLE_PLAYBOOK_CHECK" \
+            --inventory-file ansible-mongo/inventory.yml
+
+  mongo_deploy:
+    name: Deploy
+    runs-on: self-hosted
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'deploy'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r ansible-mongo/requirements.yml
+
+      - name: Run deploy playbook
+        run: |
+          ansible-playbook "$ANSIBLE_PLAYBOOK_DEPLOY" \
+            --inventory-file ansible-mongo/inventory.yml

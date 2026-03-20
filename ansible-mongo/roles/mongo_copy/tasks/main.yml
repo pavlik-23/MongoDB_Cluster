@@ -1,4 +1,0 @@
----
-- import_tasks: tasks/mongo_copy.yml
-#- import_tasks: tasks/info.yml
-#- import_tasks: tasks/db_test.yml

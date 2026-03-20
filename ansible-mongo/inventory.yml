@@ -2,43 +2,40 @@
 
 check:
   hosts:
-    "192.168.1.57":
+    "10.192.24.90":
       ansible_user: root
       ping_check: true
-      check_ports: [27997]
-    "192.168.1.59":
+      check_ports: [27017]
+    "10.192.24.91":
       ansible_user: root
       ping_check: true
-      check_ports: [27997] 
-    "192.168.1.79":
+      check_ports: [27017] 
+    "10.192.24.92":
       ansible_user: root
       ping_check: true
-      check_ports: [27997] 
+      check_ports: [27017] 
 
 mongo:
   hosts:
-    "192.168.1.57":
+    "10.192.24.90":
       ansible_user: root
       ping_check: true
-    "192.168.1.59":
+    "10.192.24.91":
       ansible_user: root
       ping_check: true
-    "192.168.1.79":
+    "10.192.24.92":
       ansible_user: root
       ping_check: true
 
 all:
   vars:
-    project_name: mongodb_27997
-    service_name: 999-business-api
+    project_name: mongodb_27017
+    service_name: lab_github
     mongo_image: 'mongo:8.0.6' 
     mem_limit: '8192m'
-
     cache_size: '4'
-    opolog_size: '2048'
-    mongo_port: 27997
-
+    oplog_size: '4096'
+    mongo_port: 27017
     path: "/storage/mongodb/{{ project_name }}"
     replicaset_name: '{{ project_name }}'
-
     mongo_rs_verbose: false
