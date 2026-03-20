@@ -37,8 +37,8 @@ operationProfiling:
   slowOpSampleRate: 1.0
 
 replication:
-  replSetName: {{ container_name }}
-  oplogSizeMB: {{ oplog_size }}
+  replSetName: {{ project_name }}
+  oplogSizeMB: {{ opolog_size }}
   enableMajorityReadConcern: true
 
 #sharding:
@@ -48,3 +48,5 @@ replication:
 #auditLog:
 
 #snmp:
+
+
