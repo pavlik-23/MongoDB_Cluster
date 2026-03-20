@@ -1,7 +1,7 @@
 ---
 - import_tasks: tasks/ping_check.yml
 - import_tasks: tasks/port_check.yml
-- import_tasks: tasks/resource_check.yml
+#- import_tasks: tasks/resource_check.yml
 #- import_tasks: tasks/recommend_hosts.yml
 #- import_tasks: tasks/docker_ram.yml
 #- import_tasks: tasks/final_report.yml
