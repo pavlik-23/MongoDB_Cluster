@@ -13,7 +13,6 @@ on:
         type: choice
         options:
           - check
-          - copy
           - deploy
 
 env:
@@ -32,6 +31,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Start ssh-agent and add private key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          which ssh-agent || (sudo apt-get update && sudo apt-get install -y openssh-client dnsutils)
+          eval "$(ssh-agent -s)"
+          echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          cat > ~/.ssh/config <<EOF
+          Host *
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          EOF
+          chmod 600 ~/.ssh/config
+
       - name: Show Ansible version
         run: ansible --version
 
@@ -48,6 +63,22 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+     
+      - name: Start ssh-agent and add private key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |   
+          which ssh-agent || (sudo apt-get update && sudo apt-get install -y openssh-client dnsutils)
+          eval "$(ssh-agent -s)"
+          echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          cat > ~/.ssh/config <<EOF
+          Host *
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          EOF
+          chmod 600 ~/.ssh/config
 
       - name: Install Ansible collections
         run: ansible-galaxy collection install -r ansible-mongo/requirements.yml
