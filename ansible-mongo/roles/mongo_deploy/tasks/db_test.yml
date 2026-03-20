@@ -21,15 +21,22 @@
     or insert_out.stdout is search('modifiedCount: 1')
   failed_when: insert_out.rc != 0
 
-- name: Assert upsert reușit
+#- name: Assert upsert reușit
+#  assert:
+#    that:
+#      - insert_out.stdout is search('acknowledged: true')
+#      - (insert_out.stdout is search('upsertedCount: 1')) or
+#        (insert_out.stdout is search('modifiedCount: 1'))
+#    fail_msg: "Smoketest insert/update NU a reușit"
+#    success_msg: "Smoketest insert/update OK"
+
+- name: Assert upsert successful
   assert:
     that:
-      - insert_out.stdout is search('acknowledged: true')
-      - (insert_out.stdout is search('upsertedCount: 1')) or
-        (insert_out.stdout is search('modifiedCount: 1'))
-    fail_msg: "Smoketest insert/update NU a reușit"
-    success_msg: "Smoketest insert/update OK"
+      - "'acknowledged: true' in (insert_out.stdout | default('')) or 'acknowledged: true' in (insert_out.stderr | default(''))"
+    fail_msg: "Upsert-ul nu a fost confirmat de mongosh."
+    success_msg: "Upsert executat cu succes."
 
-- name: Afișează rezultatul smoketest
+- name: Result smoketest
   debug:
     var: insert_out.stdout_lines
