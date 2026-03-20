@@ -45,12 +45,23 @@
     delay: 2
     timeout: 120
 
-- name: Build RS members list (host:port)
+#- name: Build RS members list (host:port)
+#  set_fact:
+#    rs_members: >
+#      [{% for h in groups['mongo'] -%}
+#        {"_id": {{ loop.index0 }}, "host": "{{ hostvars[h].ansible_host | default(h) }}:{{ hostvars[h].mongo_port | default(mongo_port) }}"}{{ "," if not loop.last }}
+#      {%- endfor %}]
+
+- name: Initialize RS members list
   set_fact:
-    rs_members: >
-      [{% for h in groups['mongo'] -%}
-        {"_id": {{ loop.index0 }}, "host": "{{ hostvars[h].ansible_host | default(h) }}:{{ hostvars[h].mongo_port | default(mongo_port) }}"}{{ "," if not loop.last }}
-      {%- endfor %}]
+    rs_members: []
+
+- name: Build RS members list
+  set_fact:
+    rs_members: "{{ rs_members + [ {'_id': idx, 'host': (hostvars[item].ansible_host | default(item)) ~ ':' ~ (hostvars[item].mongo_port | default(mongo_port) | string)} ] }}"
+  loop: "{{ groups['mongo'] }}"
+  loop_control:
+    index_var: idx
 
 - name: Initiate RS on primary
   when: inventory_hostname == groups['mongo'][0]
