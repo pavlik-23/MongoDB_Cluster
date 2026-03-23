@@ -1,4 +1,11 @@
-# 🚀 MongoDB Cluster Automation (Ansible + GitHub Actions)
+# 🚀 MongoDB Cluster Automation
+
+This project demonstrates a fully automated deployment of a MongoDB replica set using Ansible, Docker Compose, and GitHub Actions.
+
+The goal is to provide a repeatable, production-like setup for deploying and validating a 3-node MongoDB cluster, including replica set initialization, primary election, and health verification.
+
+This project reflects real-world DevOps practices such as infrastructure automation, idempotent configuration, and CI-based validation.
+
 
 ![CI](https://github.com/pavlik-23/MongoDB_Cluster/actions/workflows/ci.yml/badge.svg)
 
@@ -13,20 +20,13 @@ from infrastructure setup → to cluster deployment → to automated validation.
 
 ---
 
-## 🎬 Demo
+## 💡 What This Project matters
 
-![Demo](docs/demo.gif)
-
----
-
-## 💡 What This Project Proves
-
-✔ Infrastructure automation
-✔ CI/CD pipeline design
-✔ Real multi-node cluster deployment
-✔ Docker + Ansible integration
-✔ Self-hosted runner usage
-✔ Production-like workflow
+- Automates complex MongoDB cluster setup
+- Ensures consistent and repeatable deployments
+- Reduces manual configuration errors
+- Demonstrates real-world DevOps practices
+- Includes validation and health checks after deployment
 
 ---
 
@@ -38,6 +38,12 @@ from infrastructure setup → to cluster deployment → to automated validation.
 4. Replica Set is initialized
 5. PRIMARY is elected
 6. Smoke test is executed ✅
+
+## Assumptions
+
+- Tested on Linux-based environments
+- Requires Docker installed on target hosts
+- Designed as a production-like simulation project
 
 ---
 
