@@ -5,15 +5,15 @@ check:
     "10.192.24.90":
       ansible_user: root
       ping_check: true
-      check_ports: [27017]
+      check_ports: [27018]
     "10.192.24.91":
       ansible_user: root
       ping_check: true
-      check_ports: [27017] 
+      check_ports: [27018] 
     "10.192.24.92":
       ansible_user: root
       ping_check: true
-      check_ports: [27017] 
+      check_ports: [27018] 
 
 mongo:
   hosts:
@@ -30,13 +30,13 @@ mongo:
 all:
   vars:
     ansible_python_interpreter: /usr/bin/python3
-    project_name: mongodb_27017
+    project_name: mongodb_27018
     service_name: lab_github
     mongo_image: 'mongo:8.0.6' 
     mem_limit: '8192m'
     cache_size: '4'
     oplog_size: '4096'
-    mongo_port: 27017
+    mongo_port: 27018
     path: "/storage/mongodb/{{ project_name }}"
     replicaset_name: '{{ project_name }}'
     mongo_rs_verbose: false
