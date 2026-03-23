@@ -44,18 +44,18 @@ from infrastructure setup → to cluster deployment → to automated validation.
 ## 🏗️ Architecture
 
 ```
-GitHub Actions (CI)
-        │
-        ▼
- Self-hosted Runner
-        │
-        ▼
-   Ansible (SSH)
-        │
- ┌───────────────┬───────────────┬───────────────┐
- │   mongo-1     │   mongo-2     │   mongo-3     │
- │   PRIMARY     │   SECONDARY   │   SECONDARY   │
- └───────────────┴───────────────┴───────────────┘
+                  GitHub Actions (CI)
+                         │
+                         ▼
+                 Self-hosted Runner
+                         │
+                         ▼
+                   Ansible (SSH)
+                         │
+    ┌───────────────┬───────────────┬───────────────┐
+    │   mongo-1     │   mongo-2     │   mongo-3     │
+    │   PRIMARY     │   SECONDARY   │   SECONDARY   │
+    └───────────────┴───────────────┴───────────────┘
 ```
 
 ---
@@ -140,9 +140,9 @@ After deployment, Ansible runs:
 ### Example Output
 
 ```
-PRIMARY: mongo-1:27017
-SECONDARY: mongo-2
-SECONDARY: mongo-3
+PRIMARY:   mongo-1:27017
+SECONDARY: mongo-2:27017
+SECONDARY: mongo-3:27017
 
 acknowledged: true
 ```
@@ -180,7 +180,6 @@ Set: mongodb_27017 | PRIMARY: mongo-1:27017
 
 ## 🔮 Future Improvements
 
-* Terraform provisioning
 * Monitoring (Prometheus + Grafana)
 * Backup automation
 * Failover testing
