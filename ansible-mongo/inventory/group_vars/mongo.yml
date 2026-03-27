@@ -1,4 +1,4 @@
-mongo_port: 27987
+mongo_port: 27977
 
 project_name: "mongodb_{{ mongo_port }}"
 service_name: "999-photo-listing"
