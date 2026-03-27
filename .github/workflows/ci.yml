@@ -16,9 +16,9 @@ on:
           - deploy
 
 env:
-  ANSIBLE_PLAYBOOK_CHECK: playbook/check.yaml
-  ANSIBLE_PLAYBOOK_DEPLOY: playbook/mongo_deploy.yaml
-  ANSIBLE_INVENTORY: inventory/hosts.yml
+  ANSIBLE_PLAYBOOK_CHECK: ansible-mongo/playbook/check.yaml
+  ANSIBLE_PLAYBOOK_DEPLOY: ansible-mongo/playbook/mongo_deploy.yaml
+  ANSIBLE_INVENTORY: ansible-mongo/inventory/hosts.yml
   ANSIBLE_FORCE_COLOR: "true"
   ANSIBLE_HOST_KEY_CHECKING: "false"
 
