@@ -1,0 +1,11 @@
+mongo_port: 27987
+
+project_name: "mongodb_{{ mongo_port }}"
+service_name: "999-photo-listing"
+mongo_image: "mongo:8.0.6"
+mem_limit: "4096m"
+cache_size: "2"
+oplog_size: "2048"
+path: "/storage/mongodb/{{ project_name }}"
+replicaset_name: "{{ project_name }}"
+mongo_rs_verbose: false
