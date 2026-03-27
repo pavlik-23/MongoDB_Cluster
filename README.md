@@ -96,12 +96,19 @@ from infrastructure setup → to cluster deployment → to automated validation.
 ```
 .
 ├── .github/workflows/ci.yml
-├── ansible-mongo/
-│   ├── inventory.yml
-│   ├── playbook/
-│   │   └── mongo_deploy.yaml
-│   └── roles/
-│       └── mongo_deploy/
+├── ansible-mongo
+├── inventory
+│   ├── group_vars
+│   │   ├── all.yml
+│   │   ├── check.yml
+│   │   └── mongo.yml
+│   └── hosts.yml
+├── playbook
+│   ├── check.yaml
+│   └── mongo_deploy.yaml
+├── roles
+|   |── check
+│   └── mongo_deploy
 ├── README.md
 ```
 
